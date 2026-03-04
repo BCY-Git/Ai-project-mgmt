@@ -1,0 +1,11 @@
+version: '3.9'
+
+services:
+  # 开发模式只启动基础设施，后端/前端本地运行
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"

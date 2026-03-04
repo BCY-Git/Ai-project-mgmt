@@ -1,0 +1,61 @@
+# Multi-stage production build
+FROM node:20-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
+
+# Install pnpm and dependencies
+RUN npm i -g pnpm@latest && \
+    pnpm install --frozen-lockfile
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN pnpm run build
+
+# Production stage
+FROM node:20-alpine AS production
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    curl \
+    dumb-init \
+    && rm -rf /var/cache/apk/*
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+WORKDIR /app
+
+# Copy package files and install production dependencies only
+COPY package.json pnpm-lock.yaml ./
+RUN npm i -g pnpm@latest && \
+    pnpm install --frozen-lockfile --prod && \
+    pnpm store prune
+
+# Copy built application
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+
+# Create necessary directories
+RUN mkdir -p logs uploads && \
+    chown -R nodejs:nodejs logs uploads
+
+# Switch to non-root user
+USER nodejs
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+EXPOSE 3000
+
+# Use dumb-init as PID 1
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/main.js"]

@@ -1,0 +1,69 @@
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Project } from './project.entity';
+import { User } from './user.entity';
+
+@Entity('tasks')
+export class Task {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  title: string;
+
+  @Column({ type: 'text', nullable: true })
+  description: string;
+
+  @Column({
+    type: 'enum',
+    enum: ['epic', 'story', 'task'],
+    default: 'task'
+  })
+  type: string;
+
+  @Column({
+    type: 'enum',
+    enum: ['todo', 'in_progress', 'review', 'done'],
+    default: 'todo'
+  })
+  status: string;
+
+  @Column({
+    type: 'enum',
+    enum: ['high', 'medium', 'low'],
+    default: 'medium'
+  })
+  priority: string;
+
+  @Column({ type: 'int', nullable: true })
+  estimatedHours: number;
+
+  @Column({ type: 'int', default: 0 })
+  actualHours: number;
+
+  @Column({ type: 'text', array: true, default: '{}' })
+  requiredSkills: string[];
+
+  @Column({ type: 'int', default: 0 })
+  sortOrder: number;
+
+  @ManyToOne(() => Project, project => project.tasks)
+  project: Project;
+
+  @ManyToOne(() => User, { nullable: true })
+  assignee: User;
+
+  @ManyToOne(() => Task, task => task.subtasks, { nullable: true })
+  parentTask: Task;
+
+  @OneToMany(() => Task, task => task.parentTask)
+  subtasks: Task[];
+
+  @Column({ type: 'date', nullable: true })
+  dueDate: Date;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
