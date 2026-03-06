@@ -17,7 +17,7 @@ export interface UserInfo {
   email: string
   name: string
   avatar?: string
-  role: string
+  role: 'admin' | 'manager' | 'member'
   skills: string[]
   currentWorkload: number
   isActive: boolean
@@ -32,22 +32,18 @@ export interface AuthResponse {
 }
 
 export const authApi = {
-  // 登录
   login(params: LoginParams): Promise<AuthResponse> {
     return http.post('/auth/login', params)
   },
 
-  // 注册
   register(params: RegisterParams): Promise<AuthResponse> {
     return http.post('/auth/register', params)
   },
 
-  // 刷新Token
   refreshToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
     return http.post('/auth/refresh', { refreshToken })
   },
 
-  // 获取当前用户信息
   getCurrentUser(): Promise<UserInfo> {
     return http.get('/auth/me')
   },

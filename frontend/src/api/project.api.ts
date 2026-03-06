@@ -1,20 +1,14 @@
 import http from './http'
 
-/**
- * Project status enum matching backend ProjectStatus enum
- */
 export enum ProjectStatus {
   DRAFT = 'draft',
   DECOMPOSING = 'decomposing',
   REVIEWING = 'reviewing',
   ACTIVE = 'active',
   COMPLETED = 'completed',
-  ARCHIVED = 'archived'
+  ARCHIVED = 'archived',
 }
 
-/**
- * Base Project interface
- */
 export interface Project {
   id: string
   name: string
@@ -23,8 +17,9 @@ export interface Project {
   startDate: string | null
   endDate: string | null
   deadline: string | null
+  ownerId?: string
   createdById: string
-  createdBy: {
+  createdBy?: {
     id: string
     name: string
     email: string
@@ -43,9 +38,6 @@ export interface Project {
   }
 }
 
-/**
- * Parameters for creating a new project
- */
 export interface CreateProjectParams {
   name: string
   description?: string
@@ -56,9 +48,6 @@ export interface CreateProjectParams {
   memberIds?: string[]
 }
 
-/**
- * Parameters for updating an existing project
- */
 export interface UpdateProjectParams {
   name?: string
   description?: string
@@ -69,9 +58,6 @@ export interface UpdateProjectParams {
   memberIds?: string[]
 }
 
-/**
- * Parameters for filtering projects
- */
 export interface ProjectFilter {
   page?: number
   limit?: number
@@ -79,9 +65,6 @@ export interface ProjectFilter {
   search?: string
 }
 
-/**
- * Paginated project list response
- */
 export interface ProjectListResponse {
   items: Project[]
   total: number
@@ -89,73 +72,86 @@ export interface ProjectListResponse {
   limit: number
 }
 
-/**
- * Project API service
- */
+function normalizeProjectList(payload: unknown): ProjectListResponse {
+  if (Array.isArray(payload)) {
+    return {
+      items: payload as Project[],
+      total: payload.length,
+      page: 1,
+      limit: payload.length,
+    }
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return {
+      items: [],
+      total: 0,
+      page: 1,
+      limit: 20,
+    }
+  }
+
+  const obj = payload as {
+    items?: unknown
+    projects?: unknown
+    total?: unknown
+    page?: unknown
+    limit?: unknown
+  }
+
+  const items = Array.isArray(obj.items)
+    ? (obj.items as Project[])
+    : Array.isArray(obj.projects)
+      ? (obj.projects as Project[])
+      : []
+
+  const total = Number(obj.total)
+  const page = Number(obj.page)
+  const limit = Number(obj.limit)
+
+  return {
+    items,
+    total: Number.isFinite(total) && total >= 0 ? total : items.length,
+    page: Number.isFinite(page) && page > 0 ? page : 1,
+    limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
+  }
+}
+
 export const projectApi = {
-  /**
-   * Get a paginated list of projects
-   * @param filter - Filter parameters for the project list
-   * @returns Promise<ProjectListResponse>
-   */
-  list(filter?: ProjectFilter): Promise<ProjectListResponse> {
+  async list(filter?: ProjectFilter): Promise<ProjectListResponse> {
     const params = new URLSearchParams()
-    if (filter?.page !== undefined) params.append('page', filter.page.toString())
-    if (filter?.limit !== undefined) params.append('limit', filter.limit.toString())
+    if (filter?.page !== undefined) params.append('page', String(filter.page))
+    if (filter?.limit !== undefined) params.append('limit', String(filter.limit))
     if (filter?.status) params.append('status', filter.status)
     if (filter?.search) params.append('search', filter.search)
 
-    return http.get(`/projects?${params.toString()}`)
+    const payload = await http.get(`/projects?${params.toString()}`)
+    return normalizeProjectList(payload)
   },
 
-  /**
-   * Create a new project
-   * @param params - Project creation parameters
-   * @returns Promise<Project>
-   */
   create(params: CreateProjectParams): Promise<Project> {
     return http.post('/projects', params)
   },
 
-  /**
-   * Get a single project by ID
-   * @param id - Project ID
-   * @returns Promise<Project>
-   */
   get(id: string): Promise<Project> {
     return http.get(`/projects/${id}`)
   },
 
-  /**
-   * Update an existing project
-   * @param id - Project ID
-   * @param params - Update parameters
-   * @returns Promise<Project>
-   */
   update(id: string, params: UpdateProjectParams): Promise<Project> {
     return http.patch(`/projects/${id}`, params)
   },
 
-  /**
-   * Delete a project
-   * @param id - Project ID
-   * @returns Promise<void>
-   */
   remove(id: string): Promise<void> {
     return http.delete(`/projects/${id}`)
   },
 
-  /**
-   * Get projects that the current user is a member of
-   * @param filter - Optional filter parameters
-   * @returns Promise<ProjectListResponse>
-   */
-  getMyProjects(filter?: Omit<ProjectFilter, 'search'>): Promise<ProjectListResponse> {
+  async getMyProjects(filter?: Omit<ProjectFilter, 'search'>): Promise<ProjectListResponse> {
     const params = new URLSearchParams()
-    if (filter?.page !== undefined) params.append('page', filter.page.toString())
-    if (filter?.limit !== undefined) params.append('limit', filter.limit.toString())
+    if (filter?.page !== undefined) params.append('page', String(filter.page))
+    if (filter?.limit !== undefined) params.append('limit', String(filter.limit))
     if (filter?.status) params.append('status', filter.status)
 
-    return http.get(`/projects/my?${params.toString()}`)
-  }
+    const payload = await http.get(`/projects/my?${params.toString()}`)
+    return normalizeProjectList(payload)
+  },
 }

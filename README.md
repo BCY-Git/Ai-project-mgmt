@@ -42,7 +42,7 @@ pnpm run dev
 ## 技术栈
 
 - 后端：NestJS, TypeScript, TypeORM, PostgreSQL, Redis
-- 前端：Vue 3, Vite, Pinia, Element Plus
+- 前端：React, TypeScript, Vite, React Router, shadcn/ui, Tailwind CSS
 - AI：Anthropic Claude API
 - 基础设施：Docker, Docker Compose, Nginx
 
