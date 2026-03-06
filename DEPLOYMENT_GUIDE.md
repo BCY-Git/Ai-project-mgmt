@@ -789,4 +789,4 @@ tail -f /var/log/nginx/error.log
 ## 版本历史
 
 - **v1.0.0** - 初始部署指南
-- 基于最新的技术栈：Docker、PostgreSQL、Redis、Nuxt.js、Node.js
+- 基于最新的技术栈：Docker、PostgreSQL、Redis、React、NestJS、Node.js
