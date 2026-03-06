@@ -1,28 +1,19 @@
 import http from './http'
 
-/**
- * Task status enum matching backend TaskStatus enum
- */
 export enum TaskStatus {
   TODO = 'todo',
   IN_PROGRESS = 'in_progress',
   REVIEW = 'review',
-  DONE = 'done'
+  DONE = 'done',
 }
 
-/**
- * Task priority enum matching backend TaskPriority enum
- */
 export enum TaskPriority {
   LOW = 'low',
   MEDIUM = 'medium',
   HIGH = 'high',
-  URGENT = 'urgent'
+  URGENT = 'urgent',
 }
 
-/**
- * Base Task interface
- */
 export interface Task {
   id: string
   title: string
@@ -31,6 +22,7 @@ export interface Task {
   priority: TaskPriority
   estimatedHours: number | null
   actualHours: number | null
+  dueDate?: string | null
   projectId: string
   parentTaskId: string | null
   assigneeId: string | null
@@ -46,13 +38,13 @@ export interface Task {
     email: string
     avatar?: string
   }
-  createdBy: {
+  createdBy?: {
     id: string
     name: string
     email: string
     avatar?: string
   }
-  project: {
+  project?: {
     id: string
     name: string
   }
@@ -65,9 +57,6 @@ export interface Task {
   dependentOn: Task[]
 }
 
-/**
- * Parameters for creating a new task
- */
 export interface CreateTaskParams {
   title: string
   description?: string
@@ -81,9 +70,6 @@ export interface CreateTaskParams {
   dependencyIds?: string[]
 }
 
-/**
- * Parameters for updating an existing task
- */
 export interface UpdateTaskParams {
   title?: string
   description?: string
@@ -95,9 +81,6 @@ export interface UpdateTaskParams {
   tags?: string[]
 }
 
-/**
- * Parameters for filtering tasks
- */
 export interface TaskFilter {
   page?: number
   limit?: number
@@ -110,16 +93,10 @@ export interface TaskFilter {
   tags?: string[]
 }
 
-/**
- * Parameters for assigning a task
- */
 export interface AssignTaskParams {
-  assigneeId: string
+  assigneeId?: string
 }
 
-/**
- * Parameters for reordering tasks
- */
 export interface ReorderParams {
   taskIds: string[]
   newOrder: number[]
@@ -148,9 +125,6 @@ export interface AiDecomposeResponse {
   tasks: AiDecomposeTask[]
 }
 
-/**
- * Paginated task list response
- */
 export interface TaskListResponse {
   items: Task[]
   total: number
@@ -158,92 +132,94 @@ export interface TaskListResponse {
   limit: number
 }
 
-/**
- * Task API service
- */
+function normalizeTaskList(payload: unknown): TaskListResponse {
+  if (Array.isArray(payload)) {
+    return {
+      items: payload as Task[],
+      total: payload.length,
+      page: 1,
+      limit: payload.length,
+    }
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return {
+      items: [],
+      total: 0,
+      page: 1,
+      limit: 20,
+    }
+  }
+
+  const obj = payload as {
+    items?: unknown
+    data?: unknown
+    total?: unknown
+    page?: unknown
+    limit?: unknown
+    meta?: { total?: unknown; page?: unknown; limit?: unknown }
+  }
+
+  const items = Array.isArray(obj.items)
+    ? (obj.items as Task[])
+    : Array.isArray(obj.data)
+      ? (obj.data as Task[])
+      : []
+
+  const meta = obj.meta || {}
+  const total = Number(meta.total ?? obj.total)
+  const page = Number(meta.page ?? obj.page)
+  const limit = Number(meta.limit ?? obj.limit)
+
+  return {
+    items,
+    total: Number.isFinite(total) && total >= 0 ? total : items.length,
+    page: Number.isFinite(page) && page > 0 ? page : 1,
+    limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
+  }
+}
+
 export const taskApi = {
-  /**
-   * Get a paginated list of tasks
-   * @param filter - Filter parameters for the task list
-   * @returns Promise<TaskListResponse>
-   */
-  list(filter?: TaskFilter): Promise<TaskListResponse> {
+  async list(filter?: TaskFilter): Promise<TaskListResponse> {
     const params = new URLSearchParams()
-    if (filter?.page !== undefined) params.append('page', filter.page.toString())
-    if (filter?.limit !== undefined) params.append('limit', filter.limit.toString())
+    if (filter?.page !== undefined) params.append('page', String(filter.page))
+    if (filter?.limit !== undefined) params.append('limit', String(filter.limit))
     if (filter?.projectId) params.append('projectId', filter.projectId)
     if (filter?.assigneeId) params.append('assigneeId', filter.assigneeId)
     if (filter?.status) params.append('status', filter.status)
     if (filter?.priority) params.append('priority', filter.priority)
     if (filter?.parentTaskId) params.append('parentTaskId', filter.parentTaskId)
     if (filter?.search) params.append('search', filter.search)
-    if (filter?.tags) filter.tags.forEach(tag => params.append('tags', tag))
+    if (filter?.tags) filter.tags.forEach((tag) => params.append('tags', tag))
 
-    return http.get(`/tasks?${params.toString()}`)
+    const payload = await http.get(`/tasks?${params.toString()}`)
+    return normalizeTaskList(payload)
   },
 
-  /**
-   * Create a new task
-   * @param params - Task creation parameters
-   * @returns Promise<Task>
-   */
   create(params: CreateTaskParams): Promise<Task> {
     return http.post('/tasks', params)
   },
 
-  /**
-   * Get a single task by ID
-   * @param id - Task ID
-   * @returns Promise<Task>
-   */
   get(id: string): Promise<Task> {
     return http.get(`/tasks/${id}`)
   },
 
-  /**
-   * Update an existing task
-   * @param id - Task ID
-   * @param params - Update parameters
-   * @returns Promise<Task>
-   */
   update(id: string, params: UpdateTaskParams): Promise<Task> {
     return http.patch(`/tasks/${id}`, params)
   },
 
-  /**
-   * Delete a task
-   * @param id - Task ID
-   * @returns Promise<void>
-   */
   remove(id: string): Promise<void> {
     return http.delete(`/tasks/${id}`)
   },
 
-  /**
-   * Update the status of a task
-   * @param id - Task ID
-   * @param status - New status
-   * @returns Promise<Task>
-   */
   updateStatus(id: string, status: TaskStatus): Promise<Task> {
     return http.patch(`/tasks/${id}/status`, { status })
   },
 
-  /**
-   * Assign a task to a user
-   * @param id - Task ID
-   * @param params - Assignment parameters
-   * @returns Promise<Task>
-   */
   assign(id: string, params: AssignTaskParams): Promise<Task> {
     return http.patch(`/tasks/${id}/assign`, params)
   },
 
-  /**
-   * Reorder tasks
-   * @param params - Reorder parameters
-   * @returns Promise<void>
-   */
   reorder(params: ReorderParams): Promise<void> {
     const tasks = params.taskIds.map((id, index) => ({
       id,
@@ -253,28 +229,24 @@ export const taskApi = {
     return http.post('/tasks/reorder', { tasks })
   },
 
-  /**
-   * Get tasks assigned to the current user
-   * @param filter - Optional filter parameters
-   * @returns Promise<TaskListResponse>
-   */
-  getMyTasks(filter?: Omit<TaskFilter, 'assigneeId'>): Promise<TaskListResponse> {
+  async getMyTasks(filter?: Omit<TaskFilter, 'assigneeId'>): Promise<TaskListResponse> {
     const params = new URLSearchParams()
-    if (filter?.page !== undefined) params.append('page', filter.page.toString())
-    if (filter?.limit !== undefined) params.append('limit', filter.limit.toString())
+    if (filter?.page !== undefined) params.append('page', String(filter.page))
+    if (filter?.limit !== undefined) params.append('limit', String(filter.limit))
     if (filter?.projectId) params.append('projectId', filter.projectId)
     if (filter?.status) params.append('status', filter.status)
     if (filter?.priority) params.append('priority', filter.priority)
     if (filter?.parentTaskId) params.append('parentTaskId', filter.parentTaskId)
     if (filter?.search) params.append('search', filter.search)
-    if (filter?.tags) filter.tags.forEach(tag => params.append('tags', tag))
+    if (filter?.tags) filter.tags.forEach((tag) => params.append('tags', tag))
 
-    return http.get(`/tasks/my?${params.toString()}`)
+    const payload = await http.get(`/tasks/my?${params.toString()}`)
+    return normalizeTaskList(payload)
   },
 
   decompose(params: AiDecomposeParams): Promise<AiDecomposeResponse> {
     if (!params.file) {
-      return http.post('/tasks/ai/decompose', params)
+      return http.post('/tasks/ai/decompose', params, { timeout: 70000 })
     }
 
     const formData = new FormData()
@@ -284,6 +256,7 @@ export const taskApi = {
     if (params.projectName) formData.append('projectName', params.projectName)
     if (params.maxTasks !== undefined) formData.append('maxTasks', String(params.maxTasks))
     formData.append('file', params.file)
-    return http.post('/tasks/ai/decompose', formData)
-  }
+
+    return http.post('/tasks/ai/decompose', formData, { timeout: 70000 })
+  },
 }

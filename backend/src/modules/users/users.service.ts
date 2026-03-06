@@ -2,6 +2,7 @@ import { Injectable, ConflictException, NotFoundException } from '@nestjs/common
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '@/entities/user.entity';
+import { Task } from '@/modules/tasks/task.entity';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -9,6 +10,8 @@ export class UserService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(Task)
+    private taskRepository: Repository<Task>,
   ) {}
 
   async create(userData: Partial<User>): Promise<User> {
@@ -62,12 +65,21 @@ export class UserService {
     return this.userRepository.findByIds(ids);
   }
 
-  async updateSkillsAndWorkload(userId: string, skills: string[], workload: number) {
+  async updateSkills(userId: string, skills: string[]) {
+    await this.findById(userId);
     await this.userRepository.update(userId, {
       skills,
-      currentWorkload: workload,
     });
     return this.findById(userId);
+  }
+
+  async findUserTasks(userId: string): Promise<Task[]> {
+    await this.findById(userId);
+    return this.taskRepository.find({
+      where: { assigneeId: userId },
+      relations: ['project', 'assignee', 'createdBy', 'parentTask', 'subtasks', 'dependencies', 'dependentOn'],
+      order: { updatedAt: 'DESC' },
+    });
   }
 
   async updateUserWorkload(userId: string, hoursChange: number) {

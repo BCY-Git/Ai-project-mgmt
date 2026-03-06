@@ -10,10 +10,15 @@ import { User } from './entities/user.entity';
 import { Project } from './entities/project.entity';
 import { Task } from './modules/tasks/task.entity';
 import { AiLog } from './entities/ai-log.entity';
+import { ChatChannel } from '@/modules/chat/entities/chat-channel.entity';
+import { ChatChannelMember } from '@/modules/chat/entities/chat-channel-member.entity';
+import { ChatMessage } from '@/modules/chat/entities/chat-message.entity';
+import { ChatAttachment } from '@/modules/chat/entities/chat-attachment.entity';
 import { AuthModule } from '@/auth/auth.module';
 import { UsersModule } from '@/modules/users/users.module';
 import { ProjectsModule } from '@/modules/projects/projects.module';
 import { TasksModule } from '@/modules/tasks/tasks.module';
+import { ChatModule } from '@/modules/chat/chat.module';
 
 @Module({
   imports: [
@@ -38,7 +43,16 @@ import { TasksModule } from '@/modules/tasks/tasks.module';
           username: process.env.DB_USER || 'postgres',
           password: process.env.DB_PASSWORD || 'xiaoer',
           database: process.env.DB_NAME || 'ai_project_mgmt',
-          entities: [User, Project, Task, AiLog],
+          entities: [
+            User,
+            Project,
+            Task,
+            AiLog,
+            ChatChannel,
+            ChatChannelMember,
+            ChatMessage,
+            ChatAttachment,
+          ],
           synchronize: process.env.NODE_ENV === 'development',
           logging: process.env.NODE_ENV === 'development',
         };
@@ -57,6 +71,7 @@ import { TasksModule } from '@/modules/tasks/tasks.module';
     UsersModule,
     ProjectsModule,
     TasksModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

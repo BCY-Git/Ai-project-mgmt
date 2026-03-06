@@ -1,7 +1,6 @@
 import {
   Controller,
   Get,
-  Post,
   Put,
   Body,
   Param,
@@ -13,14 +12,7 @@ import { UserService } from './users.service';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { AuthenticatedGuard } from '@/common/guards/authenticated.guard';
 import type { User } from '@/entities/user.entity';
-
-export interface UpdateSkillsDto {
-  skills: string[];
-}
-
-export interface UpdateWorkloadDto {
-  workload: number;
-}
+import { UpdateSkillsDto } from './dto/update-skills.dto';
 
 @ApiTags('用户管理')
 @Controller('users')
@@ -70,13 +62,19 @@ export class UsersController {
       throw new ForbiddenException('没有权限操作');
     }
 
-    return this.userService.updateSkillsAndWorkload(id, dto.skills, 0);
+    return this.userService.updateSkills(id, dto.skills);
   }
 
   @Get(':id/tasks')
   @ApiOperation({ summary: '获取用户所有任务' })
-  async getUserTasks(@Param('id') id: string) {
-    // TODO: 实现获取用户任务
-    return [];
+  async getUserTasks(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: User,
+  ) {
+    if (id !== currentUser.id && !['admin', 'manager'].includes(currentUser.role)) {
+      throw new ForbiddenException('没有权限访问');
+    }
+
+    return this.userService.findUserTasks(id);
   }
 }

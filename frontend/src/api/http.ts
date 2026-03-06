@@ -1,77 +1,146 @@
-import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
-import { ElMessage } from 'element-plus'
-import { useAuthStore } from '@/stores/auth.store'
+import axios, {
+  AxiosError,
+  type AxiosInstance,
+  type AxiosResponse,
+  type InternalAxiosRequestConfig,
+} from 'axios'
+
+type ApiEnvelope<T> = {
+  code: number
+  message: string
+  data: T
+}
+
+type RetriableRequest = InternalAxiosRequestConfig & { _retry?: boolean }
+
+const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 
 const http: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// 请求拦截器
-http.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const authStore = useAuthStore()
-    if (config.data instanceof FormData && config.headers) {
-      delete config.headers['Content-Type']
-    }
-    if (authStore.accessToken) {
-      config.headers.Authorization = `Bearer ${authStore.accessToken}`
-    }
-    return config
+const authHttp = axios.create({
+  baseURL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
   },
-  (error) => {
-    return Promise.reject(error)
-  }
-)
+})
 
-// 响应拦截器
+function getAccessToken(): string | null {
+  return localStorage.getItem('accessToken')
+}
+
+function getRefreshToken(): string | null {
+  return localStorage.getItem('refreshToken')
+}
+
+function setTokens(accessToken: string, refreshToken: string): void {
+  localStorage.setItem('accessToken', accessToken)
+  localStorage.setItem('refreshToken', refreshToken)
+}
+
+function clearTokens(): void {
+  localStorage.removeItem('accessToken')
+  localStorage.removeItem('refreshToken')
+}
+
+function notifyAuthExpired(): void {
+  window.dispatchEvent(new CustomEvent('auth:expired'))
+}
+
+let refreshTokenPromise: Promise<string | null> | null = null
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshTokenPromise) {
+    return refreshTokenPromise
+  }
+
+  refreshTokenPromise = (async () => {
+    const refreshToken = getRefreshToken()
+    if (!refreshToken) {
+      return null
+    }
+
+    try {
+      const response = await authHttp.post<
+        ApiEnvelope<{ accessToken: string; refreshToken: string }>
+      >('/auth/refresh', { refreshToken })
+
+      const payload = response.data
+      if (payload?.code !== 0 || !payload?.data?.accessToken || !payload?.data?.refreshToken) {
+        return null
+      }
+
+      setTokens(payload.data.accessToken, payload.data.refreshToken)
+      return payload.data.accessToken
+    } catch {
+      return null
+    } finally {
+      refreshTokenPromise = null
+    }
+  })()
+
+  return refreshTokenPromise
+}
+
+http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const token = getAccessToken()
+  if (config.data instanceof FormData && config.headers) {
+    delete config.headers['Content-Type']
+  }
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
 http.interceptors.response.use(
-  (response) => {
-    const { code, message, data } = response.data
-    if (code === 0) {
-      return data
-    } else {
-      ElMessage.error(message || '请求失败')
-      return Promise.reject(new Error(message || '请求失败'))
+  ((response: AxiosResponse<ApiEnvelope<unknown>>) => {
+    const payload = response.data
+    if (payload && payload.code === 0) {
+      return payload.data
     }
+
+    const message = payload?.message || '请求失败'
+    return Promise.reject(new Error(message))
+  }) as any,
+  async (error: AxiosError<{ message?: string }>) => {
+    const originalRequest = error.config as RetriableRequest | undefined
+    const status = error.response?.status
+    const requestUrl = originalRequest?.url || ''
+
+    if (
+      status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !requestUrl.includes('/auth/login') &&
+      !requestUrl.includes('/auth/refresh')
+    ) {
+      originalRequest._retry = true
+      const nextToken = await refreshAccessToken()
+
+      if (nextToken) {
+        originalRequest.headers = originalRequest.headers || {}
+        originalRequest.headers.Authorization = `Bearer ${nextToken}`
+        return http.request(originalRequest)
+      }
+
+      clearTokens()
+      notifyAuthExpired()
+    }
+
+    const message =
+      (error.response?.data && 'message' in error.response.data && error.response.data.message) ||
+      error.message ||
+      '网络错误'
+
+    return Promise.reject(new Error(message))
   },
-  async (error) => {
-    const authStore = useAuthStore()
-    const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined
-
-    if (error.response?.status === 401) {
-      const requestUrl = originalRequest?.url || ''
-
-      if (requestUrl.includes('/auth/refresh') || originalRequest?._retry) {
-        authStore.logout()
-        return Promise.reject(error)
-      }
-
-      if (originalRequest) {
-        originalRequest._retry = true
-      }
-
-      try {
-        await authStore.refreshAccessToken()
-        if (originalRequest?.headers && authStore.accessToken) {
-          originalRequest.headers.Authorization = `Bearer ${authStore.accessToken}`
-        }
-        if (originalRequest) {
-          return http.request(originalRequest)
-        }
-      } catch (_refreshError) {
-        authStore.logout()
-        return Promise.reject(error)
-      }
-    } else {
-      ElMessage.error(error.response?.data?.message || '网络错误')
-    }
-
-    return Promise.reject(error)
-  }
 )
 
 export default http

@@ -30,11 +30,15 @@ export class AiService {
     const maxTasks = Math.max(3, Math.min(input.maxTasks ?? 8, 20));
     const prompt = [
       `Project Name: ${input.projectName || 'Untitled Project'}`,
-      `Project Description: ${input.projectDescription}`,
+      `Project Description:\n${input.projectDescription}`,
       `Max tasks: ${maxTasks}`,
       '',
-      'Return valid JSON only, no markdown:',
+      'Output JSON schema:',
       '{"summary":"string","totalEstimatedHours":number,"tasks":[{"title":"string","description":"string","estimatedHours":number,"priority":"low|medium|high|urgent"}]}',
+      'Constraints:',
+      '- tasks.length <= Max tasks',
+      '- estimatedHours > 0',
+      '- priority must be one of low|medium|high|urgent',
     ].join('\n');
 
     let parsed: DecomposeResult;
@@ -107,9 +111,7 @@ export class AiService {
     try {
       const { SystemMessage, HumanMessage } = await this.getLangChainMessages();
       const response = await (await this.getModel()).invoke([
-        new SystemMessage(
-          'You are a senior technical project manager. Split projects into practical implementation tasks.',
-        ),
+        new SystemMessage(this.getSystemPrompt()),
         new HumanMessage(prompt),
       ]);
       return this.getMessageText(response.content);
@@ -143,7 +145,7 @@ export class AiService {
           messages: [
             {
               role: 'system',
-              content: 'You are a senior technical project manager. Split projects into practical implementation tasks.',
+              content: this.getSystemPrompt(),
             },
             {
               role: 'user',
@@ -208,6 +210,27 @@ export class AiService {
     }
     // avoid extremely long waiting in UI
     return Math.min(Math.max(raw, 5000), 60000);
+  }
+
+  private getSystemPrompt(): string {
+    return [
+      'You are a senior technical project manager for software delivery.',
+      'Your goal is to decompose project requirements into implementation-ready tasks.',
+      '',
+      'Rules:',
+      '1) Tasks must be atomic, actionable, and testable.',
+      '2) Each task must include: title, description, estimatedHours, priority.',
+      '3) Prefer 4-16h per task; split oversized work.',
+      '4) Cover full lifecycle when applicable: requirements, design, implementation, testing, release.',
+      '5) Remove duplicates and keep tasks logically ordered.',
+      '6) Priority rubric:',
+      '   - urgent: release-blocking, security, compliance',
+      '   - high: critical path / core capability',
+      '   - medium: important but not blocking',
+      '   - low: optimization / nice-to-have',
+      '7) If requirements are ambiguous, state minimal assumptions in summary.',
+      '8) Output JSON only. No markdown. No extra keys.',
+    ].join('\n');
   }
 
   private getMessageText(content: unknown): string {
