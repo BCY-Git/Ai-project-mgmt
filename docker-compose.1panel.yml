@@ -1,14 +1,13 @@
-# 与 1Panel / OpenResty 共存：宿主机 80/443 常被占用
-# 使用方式（在项目根目录）：
-#   docker compose -f docker-compose.prod.yml -f docker-compose.1panel.yml --env-file .env.prod up -d
+# ⚠ 不要使用：docker compose -f docker-compose.prod.yml -f docker-compose.1panel.yml
+# Compose 规范下 ports / volumes 会「追加」，导致仍映射宿主 443，与 OpenResty 冲突。
 #
-# 访问：https://服务器IP:8443 （HTTP 入口为 :8082，会 301 到 :8443）
-# 安全组需放行 8082、8443（若用 NPM 反代到 8082，可只放行 NPM 端口）
+# ✅ 与 1Panel 共存：只改 .env.prod，再只用一份 compose：
+#   NGINX_PUBLISH_HTTP=8082
+#   NGINX_PUBLISH_HTTPS=8443
+#   NGINX_CONF_PATH=./nginx/nginx.coexist-1panel.conf
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# 访问：https://服务器IP:8443  （安全组放行 8082、8443）
 
-services:
-  nginx:
-    ports:
-      - "8082:80"
-      - "8443:443"
-    volumes:
-      - ./nginx/nginx.coexist-1panel.conf:/etc/nginx/nginx.conf:ro
+services: {}

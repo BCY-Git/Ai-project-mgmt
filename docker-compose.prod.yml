@@ -2,11 +2,12 @@ services:
   nginx:
     image: nginx:alpine
     container_name: ai-proj-mgmt-nginx
+    # 与 1Panel 共存时在 .env.prod 设置：NGINX_PUBLISH_HTTP=8082、NGINX_PUBLISH_HTTPS=8443、NGINX_CONF_PATH=./nginx/nginx.coexist-1panel.conf
     ports:
-      - "80:80"
-      - "443:443"
+      - "${NGINX_PUBLISH_HTTP:-80}:80"
+      - "${NGINX_PUBLISH_HTTPS:-443}:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${NGINX_CONF_PATH:-./nginx/nginx.conf}:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
       - ./frontend/dist:/usr/share/nginx/html:ro
       - ./logs/nginx:/var/log/nginx
