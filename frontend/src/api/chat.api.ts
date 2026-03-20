@@ -22,6 +22,7 @@ export type ChatUser = {
   id: string
   name: string
   email: string
+  role?: 'admin' | 'manager' | 'member'
 }
 
 export type ChatContact = {

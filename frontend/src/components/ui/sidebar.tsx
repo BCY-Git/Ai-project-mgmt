@@ -46,7 +46,7 @@ function SidebarProvider({ className, children }: React.ComponentProps<'div'>): 
 
   return (
     <SidebarContext.Provider value={value}>
-      <div data-slot="sidebar-provider" className={cn('flex min-h-svh w-full', className)}>
+      <div data-slot="sidebar-provider" className={cn('flex h-svh w-full overflow-hidden', className)}>
         {children}
       </div>
     </SidebarContext.Provider>
@@ -159,7 +159,7 @@ const SidebarInset = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'
   <div
     ref={ref}
     data-slot="sidebar-inset"
-    className={cn('flex min-h-svh min-w-0 flex-1 flex-col bg-background', className)}
+    className={cn('flex min-h-0 min-w-0 flex-1 flex-col bg-background', className)}
     {...props}
   />
 ))

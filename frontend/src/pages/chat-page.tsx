@@ -50,6 +50,27 @@ type ChatPageProps = {
   fullScreen?: boolean
 }
 
+type SidebarPanelKey = 'channels' | 'contacts' | 'groups' | 'directory'
+
+type PeopleItem = {
+  id: string
+  name: string
+  email: string
+  role?: 'admin' | 'manager' | 'member'
+  isSelf?: boolean
+}
+
+function roleLabel(role?: 'admin' | 'manager' | 'member'): string {
+  if (role === 'admin') return '管理员'
+  if (role === 'manager') return '项目经理'
+  if (role === 'member') return '成员'
+  return '成员'
+}
+
+function personDisplayName(person: { name?: string | null; email?: string | null }): string {
+  return person.name?.trim() || person.email?.trim() || '未命名成员'
+}
+
 export function ChatPage({ fullScreen = true }: ChatPageProps): React.JSX.Element {
   const { push } = useToast()
   const { user, accessToken } = useAuth()
@@ -67,6 +88,8 @@ export function ChatPage({ fullScreen = true }: ChatPageProps): React.JSX.Elemen
   const [createMode, setCreateMode] = React.useState<'direct' | 'group'>('direct')
   const [newChannelName, setNewChannelName] = React.useState('')
   const [selectedContactIds, setSelectedContactIds] = React.useState<string[]>([])
+  const [sidebarPanel, setSidebarPanel] = React.useState<SidebarPanelKey>('channels')
+  const [memberKeyword, setMemberKeyword] = React.useState('')
   const socketRef = React.useRef<Socket | null>(null)
   const activeChannelIdRef = React.useRef('')
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -88,6 +111,81 @@ export function ChatPage({ fullScreen = true }: ChatPageProps): React.JSX.Elemen
       }),
     [channels],
   )
+
+  const directChannels = React.useMemo(
+    () => sortedChannels.filter((channel) => channel.type === ChatChannelType.DIRECT),
+    [sortedChannels],
+  )
+
+  const groupChannels = React.useMemo(
+    () => sortedChannels.filter((channel) => channel.type !== ChatChannelType.DIRECT),
+    [sortedChannels],
+  )
+
+  const myContacts = React.useMemo<PeopleItem[]>(() => {
+    const map = new Map<string, PeopleItem>()
+
+    directChannels.forEach((channel) => {
+      const peerMember = channel.members?.find((member) => member.userId !== user?.id)
+      const peer = peerMember?.user
+      if (!peer?.id) return
+      map.set(peer.id, {
+        id: peer.id,
+        name: peer.name || '',
+        email: peer.email || '',
+        role: peer.role,
+      })
+    })
+
+    return Array.from(map.values()).sort((a, b) => personDisplayName(a).localeCompare(personDisplayName(b), 'zh-CN'))
+  }, [directChannels, user?.id])
+
+  const companyPeople = React.useMemo<PeopleItem[]>(() => {
+    const map = new Map<string, PeopleItem>()
+
+    if (user?.id) {
+      map.set(user.id, {
+        id: user.id,
+        name: user.name || '',
+        email: user.email || '',
+        role: user.role,
+        isSelf: true,
+      })
+    }
+
+    contacts.forEach((contact) => {
+      map.set(contact.id, {
+        id: contact.id,
+        name: contact.name || '',
+        email: contact.email || '',
+        role: contact.role,
+      })
+    })
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.isSelf && !b.isSelf) return -1
+      if (!a.isSelf && b.isSelf) return 1
+      return personDisplayName(a).localeCompare(personDisplayName(b), 'zh-CN')
+    })
+  }, [contacts, user?.email, user?.id, user?.name, user?.role])
+
+  const normalizedKeyword = memberKeyword.trim().toLowerCase()
+
+  const filteredContacts = React.useMemo(() => {
+    if (!normalizedKeyword) return myContacts
+    return myContacts.filter((person) => {
+      const text = `${person.name} ${person.email}`.toLowerCase()
+      return text.includes(normalizedKeyword)
+    })
+  }, [myContacts, normalizedKeyword])
+
+  const filteredCompanyPeople = React.useMemo(() => {
+    if (!normalizedKeyword) return companyPeople
+    return companyPeople.filter((person) => {
+      const text = `${person.name} ${person.email}`.toLowerCase()
+      return text.includes(normalizedKeyword)
+    })
+  }, [companyPeople, normalizedKeyword])
 
   const fetchChannels = React.useCallback(async () => {
     setLoading(true)
@@ -252,6 +350,40 @@ export function ChatPage({ fullScreen = true }: ChatPageProps): React.JSX.Elemen
     }
   }
 
+  const openOrCreateDirectChat = async (person: Pick<PeopleItem, 'id' | 'name' | 'email'>) => {
+    if (!person.id) return
+    if (person.id === user?.id) {
+      push('这是你自己的账号', 'info')
+      return
+    }
+
+    const existing = channels.find(
+      (channel) =>
+        channel.type === ChatChannelType.DIRECT && channel.members?.some((member) => member.userId === person.id),
+    )
+
+    if (existing) {
+      setActiveChannelId(existing.id)
+      setSidebarPanel('channels')
+      return
+    }
+
+    try {
+      const created = await chatApi.createChannel({
+        type: ChatChannelType.DIRECT,
+        memberIds: [person.id],
+      })
+      setChannels((prev) => [created, ...prev.filter((channel) => channel.id !== created.id)])
+      setActiveChannelId(created.id)
+      setSidebarPanel('channels')
+      push(`已创建和 ${personDisplayName(person)} 的私聊`, 'success')
+      void fetchChannels()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '创建私聊失败'
+      push(message, 'error')
+    }
+  }
+
   const sendTextMessage = async () => {
     if (!activeChannelId) {
       push('请先选择会话', 'error')
@@ -389,50 +521,194 @@ export function ChatPage({ fullScreen = true }: ChatPageProps): React.JSX.Elemen
         )}
       >
         <Card className="overflow-hidden">
-          <CardHeader>
-            <CardTitle>通信会话</CardTitle>
-            <CardDescription>项目沟通、私聊、公告统一管理</CardDescription>
-            <Button variant="outline" size="sm" onClick={() => setShowCreateDialog(true)}>
-              <Plus size={14} />
-              新建会话
-            </Button>
+          <CardHeader className="gap-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle>通信工作台</CardTitle>
+                <CardDescription>可查看会话、我的联系人、我的群组、公司全员</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setShowCreateDialog(true)}>
+                <Plus size={14} />
+                新建会话
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={sidebarPanel === 'channels' ? 'secondary' : 'outline'}
+                onClick={() => setSidebarPanel('channels')}
+              >
+                会话
+                <Badge variant="outline">{sortedChannels.length}</Badge>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={sidebarPanel === 'contacts' ? 'secondary' : 'outline'}
+                onClick={() => setSidebarPanel('contacts')}
+              >
+                我的联系人
+                <Badge variant="outline">{myContacts.length}</Badge>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={sidebarPanel === 'groups' ? 'secondary' : 'outline'}
+                onClick={() => setSidebarPanel('groups')}
+              >
+                我的群组
+                <Badge variant="outline">{groupChannels.length}</Badge>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={sidebarPanel === 'directory' ? 'secondary' : 'outline'}
+                onClick={() => setSidebarPanel('directory')}
+              >
+                公司全员
+                <Badge variant="outline">{companyPeople.length}</Badge>
+              </Button>
+            </div>
+
+            {(sidebarPanel === 'contacts' || sidebarPanel === 'directory') && (
+              <Input
+                value={memberKeyword}
+                onChange={(event) => setMemberKeyword(event.target.value)}
+                placeholder={sidebarPanel === 'contacts' ? '搜索我的联系人' : '搜索公司成员'}
+              />
+            )}
           </CardHeader>
+
           <CardContent className="space-y-2">
-            {loading && <p className="muted">会话加载中...</p>}
-            {!loading &&
-              sortedChannels.map((channel) => (
-                <div
-                  key={channel.id}
-                  className={cn(
-                    'rounded-xl border p-3 transition',
-                    channel.id === activeChannelId ? 'border-teal-500 bg-teal-50' : 'border-border bg-card',
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setActiveChannelId(channel.id)}>
-                      <p className="truncate text-sm font-semibold">{channelTitle(channel, user?.id)}</p>
-                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                        {channel.lastMessage?.content || '暂无消息'}
+            {sidebarPanel === 'channels' && (
+              <>
+                {loading && <p className="muted">会话加载中...</p>}
+                {!loading &&
+                  sortedChannels.map((channel) => (
+                    <div
+                      key={channel.id}
+                      className={cn(
+                        'rounded-xl border p-3 transition',
+                        channel.id === activeChannelId ? 'border-teal-500 bg-teal-50' : 'border-border bg-card',
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left"
+                          onClick={() => setActiveChannelId(channel.id)}
+                        >
+                          <p className="truncate text-sm font-semibold">{channelTitle(channel, user?.id)}</p>
+                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                            {channel.lastMessage?.content || '暂无消息'}
+                          </p>
+                        </button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          title={channel.isPinned ? '取消置顶' : '置顶会话'}
+                          onClick={() => void togglePin(channel)}
+                        >
+                          {channel.isPinned ? <PinOff size={14} /> : <Pin size={14} />}
+                        </Button>
+                      </div>
+                      {(channel.unreadCount || 0) > 0 && (
+                        <div className="mt-2">
+                          <Badge variant="danger">{channel.unreadCount}</Badge>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                {!loading && sortedChannels.length === 0 && <p className="muted">暂无会话，请先创建并选择联系人</p>}
+              </>
+            )}
+
+            {sidebarPanel === 'groups' && (
+              <>
+                {loading && <p className="muted">群组加载中...</p>}
+                {!loading &&
+                  groupChannels.map((channel) => (
+                    <button
+                      key={channel.id}
+                      type="button"
+                      className={cn(
+                        'w-full rounded-xl border p-3 text-left transition',
+                        channel.id === activeChannelId ? 'border-teal-500 bg-teal-50' : 'border-border bg-card',
+                      )}
+                      onClick={() => setActiveChannelId(channel.id)}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-semibold">{channelTitle(channel, user?.id)}</p>
+                        {(channel.unreadCount || 0) > 0 && <Badge variant="danger">{channel.unreadCount}</Badge>}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        成员 {channel.members?.length || 0} 人 · {channel.lastMessage?.content || '暂无消息'}
                       </p>
                     </button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      title={channel.isPinned ? '取消置顶' : '置顶会话'}
-                      onClick={() => void togglePin(channel)}
-                    >
-                      {channel.isPinned ? <PinOff size={14} /> : <Pin size={14} />}
-                    </Button>
-                  </div>
-                  {(channel.unreadCount || 0) > 0 && (
-                    <div className="mt-2">
-                      <Badge variant="danger">{channel.unreadCount}</Badge>
+                  ))}
+                {!loading && groupChannels.length === 0 && <p className="muted">你还没有加入任何群组</p>}
+              </>
+            )}
+
+            {sidebarPanel === 'contacts' && (
+              <>
+                {contactsLoading && <p className="muted">联系人加载中...</p>}
+                {!contactsLoading &&
+                  filteredContacts.map((person) => (
+                    <div key={person.id} className="rounded-xl border bg-card p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">{personDisplayName(person)}</p>
+                          <p className="truncate text-xs text-muted-foreground">{person.email || '-'}</p>
+                          <div className="mt-1">
+                            <Badge variant="outline">{roleLabel(person.role)}</Badge>
+                          </div>
+                        </div>
+                        <Button type="button" size="xs" variant="outline" onClick={() => void openOrCreateDirectChat(person)}>
+                          发消息
+                        </Button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
-            {!loading && sortedChannels.length === 0 && <p className="muted">暂无会话，请先创建并选择联系人</p>}
+                  ))}
+                {!contactsLoading && filteredContacts.length === 0 && <p className="muted">暂无联系人，可先发起私聊</p>}
+              </>
+            )}
+
+            {sidebarPanel === 'directory' && (
+              <>
+                {contactsLoading && <p className="muted">成员加载中...</p>}
+                {!contactsLoading &&
+                  filteredCompanyPeople.map((person) => (
+                    <div key={person.id} className="rounded-xl border bg-card p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1">
+                            <p className="truncate text-sm font-semibold">{personDisplayName(person)}</p>
+                            {person.isSelf && <Badge variant="secondary">我</Badge>}
+                          </div>
+                          <p className="truncate text-xs text-muted-foreground">{person.email || '-'}</p>
+                          <div className="mt-1">
+                            <Badge variant="outline">{roleLabel(person.role)}</Badge>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="outline"
+                          disabled={person.isSelf}
+                          onClick={() => void openOrCreateDirectChat(person)}
+                        >
+                          {person.isSelf ? '当前账号' : '发消息'}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                {!contactsLoading && filteredCompanyPeople.length === 0 && <p className="muted">没有找到匹配的公司成员</p>}
+              </>
+            )}
           </CardContent>
         </Card>
 

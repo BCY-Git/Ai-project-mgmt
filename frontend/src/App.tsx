@@ -1,20 +1,23 @@
+import * as React from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/app-shell'
 import { ProtectedRoute } from '@/components/auth/protected-route'
 import { AuthProvider } from '@/context/auth-context'
+import { Spinner } from '@/components/ui/spinner'
 import { ToastProvider } from '@/components/ui/toast'
-import { LoginPage } from '@/pages/login-page'
-import { DashboardPage } from '@/pages/dashboard-page'
-import { ProjectListPage } from '@/pages/project-list-page'
-import { ProjectGlobalPage } from '@/pages/project-global-page'
-import { ProjectDetailPage } from '@/pages/project-detail-page'
-import { ChatPage } from '@/pages/chat-page'
-import { TaskBoardPage } from '@/pages/task-board-page'
-import { MyTasksPage } from '@/pages/my-tasks-page'
-import { TeamPage } from '@/pages/team-page'
-import { AiDecomposePage } from '@/pages/ai-decompose-page'
-import { ForbiddenPage } from '@/pages/forbidden-page'
-import { NotFoundPage } from '@/pages/not-found-page'
+
+const LoginPage = React.lazy(async () => ({ default: (await import('@/pages/login-page')).LoginPage }))
+const DashboardPage = React.lazy(async () => ({ default: (await import('@/pages/dashboard-page')).DashboardPage }))
+const ProjectListPage = React.lazy(async () => ({ default: (await import('@/pages/project-list-page')).ProjectListPage }))
+const ProjectGlobalPage = React.lazy(async () => ({ default: (await import('@/pages/project-global-page')).ProjectGlobalPage }))
+const ProjectDetailPage = React.lazy(async () => ({ default: (await import('@/pages/project-detail-page')).ProjectDetailPage }))
+const ChatPage = React.lazy(async () => ({ default: (await import('@/pages/chat-page')).ChatPage }))
+const TaskBoardPage = React.lazy(async () => ({ default: (await import('@/pages/task-board-page')).TaskBoardPage }))
+const MyTasksPage = React.lazy(async () => ({ default: (await import('@/pages/my-tasks-page')).MyTasksPage }))
+const TeamPage = React.lazy(async () => ({ default: (await import('@/pages/team-page')).TeamPage }))
+const AiDecomposePage = React.lazy(async () => ({ default: (await import('@/pages/ai-decompose-page')).AiDecomposePage }))
+const ForbiddenPage = React.lazy(async () => ({ default: (await import('@/pages/forbidden-page')).ForbiddenPage }))
+const NotFoundPage = React.lazy(async () => ({ default: (await import('@/pages/not-found-page')).NotFoundPage }))
 
 function ShellRoutes(): React.JSX.Element {
   return (
@@ -32,47 +35,60 @@ export default function App(): React.JSX.Element {
   return (
     <AuthProvider>
       <ToastProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/403" element={<ForbiddenPage />} />
-            <Route
-              path="/chat"
-              element={
-                <ProtectedRoute>
-                  <ChatPage fullScreen />
-                </ProtectedRoute>
-              }
-            />
-
-            <Route path="/" element={<ShellRoutes />}>
-              <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard" element={<DashboardPage />} />
-              <Route path="projects" element={<ProjectListPage />} />
-              <Route path="projects-global" element={<ProjectGlobalPage />} />
-              <Route path="projects/:id" element={<ProjectDetailPage />} />
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
+          <React.Suspense
+            fallback={
+              <div className="page-loading-card">
+                <Spinner />
+              </div>
+            }
+          >
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/403" element={<ForbiddenPage />} />
               <Route
-                path="projects/:id/decompose"
+                path="/chat"
                 element={
-                  <ManagerRoute>
-                    <AiDecomposePage />
-                  </ManagerRoute>
+                  <ProtectedRoute>
+                    <ChatPage fullScreen />
+                  </ProtectedRoute>
                 }
               />
-              <Route path="projects/:id/board" element={<TaskBoardPage />} />
-              <Route path="my-tasks" element={<MyTasksPage />} />
-              <Route
-                path="team"
-                element={
-                  <ManagerRoute>
-                    <TeamPage />
-                  </ManagerRoute>
-                }
-              />
-            </Route>
 
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
+              <Route path="/" element={<ShellRoutes />}>
+                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="projects" element={<ProjectListPage />} />
+                <Route path="projects-global" element={<ProjectGlobalPage />} />
+                <Route path="projects/:id" element={<ProjectDetailPage />} />
+                <Route
+                  path="projects/:id/decompose"
+                  element={
+                    <ManagerRoute>
+                      <AiDecomposePage />
+                    </ManagerRoute>
+                  }
+                />
+                <Route path="projects/:id/board" element={<TaskBoardPage />} />
+                <Route path="my-tasks" element={<MyTasksPage />} />
+                <Route
+                  path="team"
+                  element={
+                    <ManagerRoute>
+                      <TeamPage />
+                    </ManagerRoute>
+                  }
+                />
+              </Route>
+
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </React.Suspense>
         </BrowserRouter>
       </ToastProvider>
     </AuthProvider>

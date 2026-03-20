@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# AI Project Management System Deployment Script
-# This script handles building and deploying the application to production
+# AI 项目管理系统部署脚本
+# 此脚本处理应用程序的构建和生产部署
 
 set -e  # Exit on any error
 
@@ -28,6 +28,11 @@ print_error() {
 BACKUP_DB=false
 SKIP_BUILD=false
 ENV_FILE=".env.prod"
+COMPOSE_CMD=""
+
+compose() {
+    ${COMPOSE_CMD} -f docker-compose.prod.yml "$@"
+}
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -68,14 +73,14 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Load environment variables
-print_status "Loading environment variables from $ENV_FILE"
+# 从环境文件加载环境变量
+print_status "正在从 $ENV_FILE 加载环境变量"
 export $(grep -v '^#' "$ENV_FILE" | xargs)
 
-# Function to backup database
+# 备份数据库的函数
 backup_database() {
     if [ "$BACKUP_DB" = true ]; then
-        print_status "Creating database backup..."
+        print_status "正在创建数据库备份..."
 
         BACKUP_DIR="database/backups"
         BACKUP_FILE="$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).sql"
@@ -84,110 +89,114 @@ backup_database() {
         mkdir -p "$BACKUP_DIR"
 
         # Run backup
-        docker-compose -f docker-compose.prod.yml exec -T postgres pg_dump \
-            -U "$DATABASE_USERNAME" \
-            -d "$DATABASE_NAME" \
+        compose exec -T postgres pg_dump \
+            -U "$DB_USER" \
+            -d "$DB_NAME" \
             > "$BACKUP_FILE"
 
-        print_status "Database backup created: $BACKUP_FILE"
+        print_status "数据库备份已创建: $BACKUP_FILE"
 
         # Compress backup
         gzip "$BACKUP_FILE"
-        print_status "Backup compressed: ${BACKUP_FILE}.gz"
+        print_status "备份已压缩: ${BACKUP_FILE}.gz"
     fi
 }
 
-# Function to build and deploy
+# 构建和部署的函数
 build_and_deploy() {
-    print_status "Starting deployment process..."
+    print_status "正在开始部署流程..."
 
-    # Stop existing services
-    print_status "Stopping existing services..."
-    docker-compose -f docker-compose.prod.yml down
+    # 停止现有服务
+    print_status "正在停止现有服务..."
+    compose down
 
     if [ "$SKIP_BUILD" = false ]; then
-        # Build new images
-        print_status "Building Docker images..."
-        docker-compose -f docker-compose.prod.yml build --no-cache
+        # 构建新镜像
+        print_status "正在构建 Docker 镜像..."
+        compose build --no-cache
 
-        # Prune old images
-        print_status "Cleaning up old Docker images..."
+        # 清理旧镜像
+        print_status "正在清理旧的 Docker 镜像..."
         docker image prune -f
     else
-        print_warning "Skipping build process as requested"
+        print_warning "根据请求跳过构建过程"
     fi
 
-    # Start services
-    print_status "Starting services..."
-    docker-compose -f docker-compose.prod.yml up -d
+    # 启动服务
+    print_status "正在启动服务..."
+    compose up -d
 
-    # Wait for services to be healthy
-    print_status "Waiting for services to be healthy..."
+    # 等待服务健康
+    print_status "正在等待服务健康..."
     sleep 10
 
     # Check service health
     for service in backend postgres redis; do
         print_status "Checking $service health..."
-        if docker-compose -f docker-compose.prod.yml ps "$service" | grep -q "Up (healthy)"; then
-            print_status "$service is healthy"
+        if compose ps "$service" | grep -q "Up (healthy)"; then
+            print_status "$service 健康状态良好"
         else
-            print_warning "$service might not be fully ready yet"
+            print_warning "$service 可能尚未完全就绪"
         fi
     done
 
-    # Run database migrations if needed
-    print_status "Running database migrations..."
-    docker-compose -f docker-compose.prod.yml exec -T backend npm run migration:run || true
+    # 运行数据库迁移（如需要）
+    print_status "正在运行数据库迁移..."
+    compose exec -T backend npm run migration:run || true
 }
 
-# Function to verify deployment
+# 验证部署的函数
 verify_deployment() {
-    print_status "Verifying deployment..."
+    print_status "正在验证部署..."
 
-    # Check if nginx is responding
+    # 检查 Nginx（静态页 + SSL；无独立 frontend 容器）
     sleep 5
-    if curl -f -s http://localhost/health > /dev/null; then
-        print_status "Frontend is responding"
+    if compose exec -T backend curl -k -f -s "https://nginx/health" > /dev/null; then
+        print_status "Nginx 健康检查通过"
     else
-        print_error "Frontend health check failed"
+        print_error "Nginx 健康检查失败（请确认 nginx/ssl 证书与 frontend/dist 已就绪）"
         return 1
     fi
 
-    # Check backend API
-    if curl -f -s http://localhost/api/health > /dev/null; then
-        print_status "Backend API is responding"
+    # 检查后端 API（容器内）
+    if compose exec -T backend curl -f -s http://localhost:3000/api/v1 > /dev/null; then
+        print_status "后端 API 正在响应"
     else
-        print_error "Backend API health check failed"
+        print_error "后端 API 健康检查失败"
         return 1
     fi
 
-    print_status "Deployment verification completed successfully!"
+    print_status "部署验证成功完成！"
 }
 
-# Main execution
+# 主要执行函数
 main() {
-    print_status "AI Project Management System Deployment"
+    print_status "AI 项目管理系统部署"
     print_status "====================================="
 
-    # Check Docker and Docker Compose
+    # 检查 Docker 和 Docker Compose
     if ! command -v docker &> /dev/null; then
-        print_error "Docker is not installed!"
+        print_error "未安装 Docker！"
         exit 1
     fi
 
-    if ! command -v docker-compose &> /dev/null; then
-        print_error "Docker Compose is not installed!"
+    if command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD="docker-compose"
+    elif docker compose version &> /dev/null; then
+        COMPOSE_CMD="docker compose"
+    else
+        print_error "未安装 Docker Compose（docker-compose 或 docker compose）！"
         exit 1
     fi
 
-    # Create SSL directory if it doesn't exist
+    # 创建 SSL 目录（如果不存在）
     mkdir -p nginx/ssl
 
-    # Check if SSL certificates exist
+    # 检查 SSL 证书是否存在
     if [ ! -f "nginx/ssl/cert.pem" ] || [ ! -f "nginx/ssl/key.pem" ]; then
-        print_warning "SSL certificates not found in nginx/ssl/"
-        print_warning "Please add your SSL certificates before running in production"
-        print_status "For development, you can generate self-signed certificates:"
+        print_warning "在 nginx/ssl/ 中未找到 SSL 证书"
+        print_warning "请在生产环境运行前添加 SSL 证书"
+        print_status "开发环境可生成自签名证书："
         echo "  openssl req -x509 -nodes -days 365 -newkey rsa:2048 \\"
         echo "    -keyout nginx/ssl/key.pem \\"
         echo "    -out nginx/ssl/cert.pem"
@@ -199,34 +208,34 @@ main() {
         fi
     fi
 
-    # Create necessary directories
+    # 创建必要目录
     mkdir -p logs/nginx logs/backend logs/worker uploads database/backups
 
-    # Backup database if requested
+    # 备份数据库（如请求）
     backup_database
 
-    # Build and deploy
+    # 构建和部署
     build_and_deploy
 
-    # Verify deployment
+    # 验证部署
     if verify_deployment; then
-        print_status "🎉 Deployment completed successfully!"
+        print_status "🎉 部署成功完成！"
         print_status ""
-        print_status "Services are running at:"
+        print_status "服务运行地址："
         print_status "  Frontend: https://localhost"
-        print_status "  Backend API: https://localhost/api"
+        print_status "  Backend API: https://localhost/api/v1"
         print_status ""
-        print_status "To view logs: docker-compose -f docker-compose.prod.yml logs -f [service]"
-        print_status "To stop: docker-compose -f docker-compose.prod.yml down"
+        print_status "查看日志：${COMPOSE_CMD} -f docker-compose.prod.yml logs -f [service]"
+        print_status "停止服务：${COMPOSE_CMD} -f docker-compose.prod.yml down"
     else
-        print_error "Deployment verification failed!"
-        print_error "Check the logs with: docker-compose -f docker-compose.prod.yml logs"
+        print_error "部署验证失败！"
+        print_error "使用以下命令检查日志：${COMPOSE_CMD} -f docker-compose.prod.yml logs"
         exit 1
     fi
 }
 
-# Error handling
-trap 'print_error "Deployment failed at line $LINENO"' ERR
+# 错误处理
+trap 'print_error "部署在第 $LINENO 行失败"' ERR
 
-# Run main function
+# 运行主函数
 main "$@"

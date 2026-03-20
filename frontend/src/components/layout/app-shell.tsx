@@ -208,7 +208,7 @@ function AppShellLayout(): React.JSX.Element {
       </Sidebar>
 
       <SidebarInset>
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/90 px-4 backdrop-blur md:px-6">
+        <header className="z-20 flex h-16 shrink-0 items-center justify-between border-b bg-background/90 px-4 backdrop-blur md:px-6">
           <div className="flex items-center gap-3">
             <SidebarTrigger aria-label="打开侧边栏" />
             <div>
@@ -228,7 +228,7 @@ function AppShellLayout(): React.JSX.Element {
           </div>
         </header>
 
-        <main className="px-4 py-4 md:px-6 md:py-5">
+        <main className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5">
           <p className="mb-3 text-xs text-muted-foreground">任务拆解 · 执行看板 · 协同追踪</p>
           <Outlet />
         </main>

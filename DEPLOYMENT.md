@@ -1,82 +1,82 @@
-# AI Project Management System - Production Deployment Guide
+# AI 项目管理系统 - 生产环境部署指南
 
-This guide explains how to deploy the AI Project Management System to production using Docker and Docker Compose.
+本指南介绍如何使用 Docker 和 Docker Compose 将 AI 项目管理系统部署到生产环境。
 
-## Prerequisites
+## 前置条件
 
-- Docker and Docker Compose installed
-- SSL certificates for HTTPS
-- Production environment variables
-- Git for cloning the repository
+- 已安装 Docker 和 Docker Compose
+- HTTPS 所需的 SSL 证书
+- 生产环境变量配置
+- Git 用于克隆仓库
 
-## Quick Start
+## 快速开始
 
-1. **Clone and prepare the repository**
+1. **克隆并准备仓库**
    ```bash
    git clone <repository-url>
    cd ai-project-mgmt
    chmod +x deploy.sh
    ```
 
-2. **Set up environment variables**
+2. **设置环境变量**
    ```bash
    cp .env.prod.example .env.prod
-   # Edit .env.prod with your actual values
+   # 编辑 .env.prod 文件，填入实际配置值
    ```
 
-3. **Add SSL certificates**
+3. **添加 SSL 证书**
    ```bash
    mkdir -p nginx/ssl
-   # Copy your certificates to nginx/ssl/cert.pem and nginx/ssl/key.pem
+   # 将证书复制到 nginx/ssl/cert.pem 和 nginx/ssl/key.pem
    ```
 
-4. **Deploy**
+4. **部署**
    ```bash
    ./deploy.sh
    ```
 
-## Deployment Script Options
+## 部署脚本选项
 
-The `deploy.sh` script supports several options:
+`deploy.sh` 脚本支持以下选项：
 
-- `--backup-db`: Create a database backup before deployment
-- `--skip-build`: Skip the build process and just redeploy existing images
-- `--env FILE`: Use a specific environment file (default: .env.prod)
-- `--help`: Show all available options
+- `--backup-db`: 部署前创建数据库备份
+- `--skip-build`: 跳过构建过程，仅重新部署现有镜像
+- `--env FILE`: 使用指定的环境文件（默认：.env.prod）
+- `--help`: 显示所有可用选项
 
-Examples:
+示例：
 ```bash
-# Deploy with database backup
+# 带数据库备份的部署
 ./deploy.sh --backup-db
 
-# Redeploy without rebuilding
+# 重新部署但不重新构建
 ./deploy.sh --skip-build
 
-# Use custom environment file
+# 使用自定义环境文件
 ./deploy.sh --env .env.staging
 ```
 
-## Architecture
+## 架构
 
-The production deployment includes:
+生产环境部署包含以下组件：
 
-- **Nginx**: Reverse proxy with SSL termination
-- **Frontend**: Production Vue.js build served by Nginx
-- **Backend**: NestJS API server
-- **PostgreSQL**: Primary database
-- **Redis**: Caching and session storage
-- **Worker**: Background job processor
+- **Nginx**: 反向代理和 SSL 终止
+- **Frontend**: 由 Nginx 提供服务的 React 生产构建
+- **Backend**: NestJS API 服务器
+- **PostgreSQL**: 主数据库
+- **Redis**: 缓存和会话存储
+- **Worker**: 后台任务处理器
 
-## SSL/TLS Setup
+## SSL/TLS 配置
 
-### Production SSL Certificates
+### 生产环境 SSL 证书
 
-1. Obtain certificates from your certificate authority
-2. Place them in `nginx/ssl/`:
-   - `cert.pem`: Certificate file
-   - `key.pem`: Private key file
+1. 从您的证书颁发机构获取证书
+2. 将证书放置在 `nginx/ssl/` 目录：
+   - `cert.pem`: 证书文件
+   - `key.pem`: 私钥文件
 
-### Self-Signed Certificates (Development Only)
+### 自签名证书（仅开发环境）
 
 ```bash
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
@@ -84,85 +84,85 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -out nginx/ssl/cert.pem
 ```
 
-## Environment Variables
+## 环境变量
 
-Key environment variables in `.env.prod`:
+`.env.prod` 中的关键环境变量：
 
-- `DATABASE_*`: PostgreSQL connection settings
-- `REDIS_*`: Redis connection settings
-- `JWT_SECRET`: Secret for JWT tokens
-- `ANTHROPIC_API_KEY`: API key for AI features
-- `CORS_ORIGIN`: Allowed frontend domain
+- `DB_*`: PostgreSQL 连接设置
+- `REDIS_*`: Redis 连接设置
+- `JWT_ACCESS_*` / `JWT_REFRESH_*`: JWT 令牌配置
+- `ANTHROPIC_API_KEY`: AI 功能的 API 密钥
+- `APP_PORT`: 后端服务端口（生产建议 3000）
 
-## Database Management
+## 数据库管理
 
-### Backup the Database
+### 备份数据库
 
-Automatic backup during deployment:
+部署期间自动备份：
 ```bash
 ./deploy.sh --backup-db
 ```
 
-Manual backup:
+手动备份：
 ```bash
 docker-compose -f docker-compose.prod.yml exec postgres pg_dump \
   -U your_username -d ai_project_mgmt_prod > backup.sql
 ```
 
-### Restore from Backup
+### 从备份恢复
 
 ```bash
-# Stop the application
+# 停止应用程序
 docker-compose -f docker-compose.prod.yml stop backend backend-worker
 
-# Restore from backup
+# 从备份恢复
 docker-compose -f docker-compose.prod.yml exec -T postgres psql \
   -U your_username -d ai_project_mgmt_prod < backup.sql
 
-# Restart services
+# 重启服务
 docker-compose -f docker-compose.prod.yml start backend backend-worker
 ```
 
-## Monitoring and Logs
+## 监控和日志
 
-### View Logs
+### 查看日志
 
 ```bash
-# All services
+# 所有服务
 docker-compose -f docker-compose.prod.yml logs -f
 
-# Specific service
+# 特定服务
 docker-compose -f docker-compose.prod.yml logs -f backend
 ```
 
-### Health Checks
+### 健康检查
 
 ```bash
-# Check service status
+# 检查服务状态
 docker-compose -f docker-compose.prod.yml ps
 
-# Manual health checks
-curl -k https://localhost/health      # Frontend
-curl -k https://localhost/api/health   # Backend
+# 手动健康检查
+curl -k https://localhost/health      # 前端
+curl -k https://localhost/api/v1       # 后端
 ```
 
-## Scaling
+## 扩展
 
-### Horizontal Scaling
+### 水平扩展
 
-To run multiple instances of the backend:
+要运行后端的多个实例：
 
 ```yaml
-# In docker-compose.prod.yml
+# 在 docker-compose.prod.yml 中
 backend:
-  # ... existing config ...
+  # ... 现有配置 ...
   deploy:
     replicas: 3
 ```
 
-### Resource Limits
+### 资源限制
 
-Add resource constraints in `docker-compose.prod.yml`:
+在 `docker-compose.prod.yml` 中添加资源约束：
 
 ```yaml
 services:
@@ -177,89 +177,89 @@ services:
           memory: 256M
 ```
 
-## Security Recommendations
+## 安全建议
 
-1. **Regular Updates**: Keep Docker images updated
-2. **Secret Management**: Use proper secret management in production
-3. **Network Security**: Configure firewall rules
-4. **Backups**: Regular automated backups
-5. **Monitoring**: Set up monitoring and alerting
-6. **SSL Certificates**: Use certificates from trusted CAs
-7. **Environment Security**: Protect environment variables
+1. **定期更新**: 保持 Docker 镜像更新
+2. **密钥管理**: 在生产环境中使用适当的密钥管理
+3. **网络安全**: 配置防火墙规则
+4. **备份**: 定期自动备份
+5. **监控**: 设置监控和警报
+6. **SSL 证书**: 使用受信任 CA 的证书
+7. **环境安全**: 保护环境变量
 
-## Troubleshooting
+## 故障排除
 
-### Common Issues
+### 常见问题
 
-1. **Port Conflicts**
+1. **端口冲突**
    ```bash
-   # Check what's using ports 80/443
+   # 检查端口 80/443 的使用情况
    sudo lsof -i :80
    sudo lsof -i :443
    ```
 
-2. **Permission Errors**
+2. **权限错误**
    ```bash
-   # Fix file permissions
+   # 修复文件权限
    sudo chown -R $USER:$USER .
    chmod +x deploy.sh
    ```
 
-3. **Database Connection Issues**
+3. **数据库连接问题**
    ```bash
-   # Check database logs
+   # 检查数据库日志
    docker-compose -f docker-compose.prod.yml logs postgres
 
-   # Verify connection
+   # 验证连接
    docker-compose -f docker-compose.prod.yml exec backend ping postgres
    ```
 
-4. **SSL Certificate Errors**
+4. **SSL 证书错误**
    ```bash
-   # Verify certificate
+   # 验证证书
    openssl x509 -in nginx/ssl/cert.pem -text -noout
    ```
 
-### Cleanup
+### 清理
 
 ```bash
-# Remove all containers and volumes (DANGEROUS - wipes data!)
+# 删除所有容器和卷（危险 - 会清除数据！）
 docker-compose -f docker-compose.prod.yml down -v
 
-# Remove unused images
+# 删除未使用的镜像
 docker image prune -a
 
-# Remove unused volumes
+# 删除未使用的卷
 docker volume prune
 ```
 
-## Maintenance
+## 维护
 
-### Regular Tasks
+### 定期任务
 
-1. **Weekly**: Check for security updates
-2. **Monthly**: Update Docker images and redeploy
-3. **Quarterly**: Review and rotate secrets
-4. **Yearly**: SSL certificate renewal
+1. **每周**: 检查安全更新
+2. **每月**: 更新 Docker 镜像并重新部署
+3. **每季度**: 审查和轮换密钥
+4. **每年**: SSL 证书续期
 
-### Update Process
+### 更新流程
 
 ```bash
-# Pull latest code
+# 拉取最新代码
 git pull origin main
 
-# Update with backup
+# 带备份的更新
 ./deploy.sh --backup-db
 
-# Or update without downtime (if no DB changes)
+# 或无停机更新（如果没有数据库变更）
 ./deploy.sh --skip-build
 ```
 
-## Support
+## 支持
 
-For deployment issues:
+如需部署问题支持：
 
-1. Check the logs: `docker-compose logs`
-2. Verify environment variables
-3. Check resource usage: `docker stats`
-4. Review this guide and troubleshoot section
+1. 检查日志：`docker-compose logs`
+2. 验证环境变量
+3. 检查资源使用：`docker stats`
+4. 查看本指南和故障排除部分

@@ -191,23 +191,27 @@ nano backend/.env
 
 **backend/.env 示例内容**：
 ```bash
-# 数据库配置
-POSTGRES_DB=ai_project_mgmt
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=your_secure_password_here
-DATABASE_URL=postgresql://postgres:your_secure_password_here@db:5432/ai_project_mgmt
+# 应用配置
+NODE_ENV=production
+APP_PORT=3000
 
-# JWT 密钥（生成一个强密钥）
-JWT_SECRET=your_jwt_secret_key_here_at_least_32_chars
+# 数据库配置
+DB_HOST=postgres
+DB_PORT=5432
+DB_NAME=ai_project_mgmt
+DB_USER=postgres
+DB_PASSWORD=your_secure_password_here
+
+# JWT 配置（生成强密钥）
+JWT_ACCESS_SECRET=your_access_secret_at_least_32_chars
+JWT_ACCESS_EXPIRES=15m
+JWT_REFRESH_SECRET=your_refresh_secret_at_least_32_chars
+JWT_REFRESH_EXPIRES=7d
 
 # Redis 配置
-REDIS_URL=redis://redis:6379/0
-
-# 前端 URL
-FRONTEND_URL=http://106.54.44.45
-
-# 生产环境标识
-NODE_ENV=production
+REDIS_HOST=redis
+REDIS_PORT=6379
+REDIS_PASSWORD=your_redis_password
 ```
 
 **生成安全的密钥**：
@@ -646,7 +650,7 @@ docker-compose logs db
 
 3. **测试 API 端点**：
 ```bash
-curl http://106.54.44.45/api/health
+curl http://106.54.44.45/api/v1
 ```
 
 4. **检查网站访问**：

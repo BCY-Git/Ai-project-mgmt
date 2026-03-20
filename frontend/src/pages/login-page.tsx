@@ -60,7 +60,6 @@ export function LoginPage(): React.JSX.Element {
               AI Project Mgmt
             </a>
           </div>
-
           <LoginForm onFormSubmit={onSubmit} loading={loading} />
         </div>
       </div>
